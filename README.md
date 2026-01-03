@@ -1,1 +1,1 @@
-# my-bot-1
+# my-bot
