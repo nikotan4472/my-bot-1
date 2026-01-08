@@ -112,7 +112,7 @@ async def list_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Выберите элемент для удаления:", reply_markup=reply_markup)
 
 
-# ---------- Удаление (как раньше) ----------
+#Удаление 
 async def handle_delete_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -128,7 +128,26 @@ async def handle_delete_request(update: Update, context: ContextTypes.DEFAULT_TY
                 [InlineKeyboardButton("❌ Нет", callback_data="cancel")]
             ])
         )
-    # ... остальные ветки (sticker, gif) — как в предыдущей версии
+
+    elif data.startswith("del_sticker_"):
+        fid = data[12:]
+        await query.message.reply_text(
+            f"❓ Удалить стикер?\nID: `{fid}`",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Да", callback_data=f"confirm_del_sticker_{fid}")],
+                [InlineKeyboardButton("❌ Нет", callback_data="cancel")]
+            ])
+        )
+
+    elif data.startswith("del_gif_"):
+        fid = data[8:]
+        await query.message.reply_text(
+            f"❓ Удалить GIF?\nID: `{fid}`",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Да", callback_data=f"confirm_del_gif_{fid}")],
+                [InlineKeyboardButton("❌ Нет", callback_data="cancel")]
+            ])
+        )
 
 async def confirm_deletion(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -140,11 +159,101 @@ async def confirm_deletion(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if pack_name in blocked["packs"]:
             blocked["packs"].remove(pack_name)
             save_blacklist(blocked)
-            await query.edit_message_text(f"✅ Пак `{pack_name}` удалён.")
-    # ... остальные ветки
+            await query.edit_message_text(f"✅ Пак `{pack_name}` удалён из чёрного списка.")
+        else:
+            await query.edit_message_text("❌ Пак уже удалён.")
 
-# (Добавьте остальные обработчики удаления — они не изменились)
+    elif data.startswith("confirm_del_sticker_"):
+        fid = data[20:]
+        if fid in blocked["stickers"]:
+            blocked["stickers"].remove(fid)
+            save_blacklist(blocked)
+            await query.edit_message_text(f"✅ Стикер `{fid}` удалён.")
+        else:
+            await query.edit_message_text("❌ Стикер уже удалён.")
 
+    elif data.startswith("confirm_del_gif_"):
+        fid = data[16:]
+        if fid in blocked["gifs"]:
+            blocked["gifs"].remove(fid)
+            save_blacklist(blocked)
+            await query.edit_message_text(f"✅ GIF `{fid}` удалена.")
+        else:
+            await query.edit_message_text("❌ GIF уже удалена.")
+
+    elif data == "cancel":
+        await query.edit_message_text("❌ Удаление отменено.")
+
+async def handle_delete_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    if data.startswith("del_pack_"):
+        pack_name = data[9:]
+        title = title_cache.get(pack_name, pack_name)
+        await query.message.reply_text(
+            f"❓ Удалить пак?\nИмя: `{pack_name}`\nНазвание: «{title}»",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Да", callback_data=f"confirm_del_pack_{pack_name}")],
+                [InlineKeyboardButton("❌ Нет", callback_data="cancel")]
+            ])
+        )
+
+    elif data.startswith("del_sticker_"):
+        fid = data[12:]
+        await query.message.reply_text(
+            f"❓ Удалить стикер?\nID: `{fid}`",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Да", callback_data=f"confirm_del_sticker_{fid}")],
+                [InlineKeyboardButton("❌ Нет", callback_data="cancel")]
+            ])
+        )
+
+    elif data.startswith("del_gif_"):
+        fid = data[8:]
+        await query.message.reply_text(
+            f"❓ Удалить GIF?\nID: `{fid}`",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Да", callback_data=f"confirm_del_gif_{fid}")],
+                [InlineKeyboardButton("❌ Нет", callback_data="cancel")]
+            ])
+        )
+
+async def confirm_deletion(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    if data.startswith("confirm_del_pack_"):
+        pack_name = data[17:]
+        if pack_name in blocked["packs"]:
+            blocked["packs"].remove(pack_name)
+            save_blacklist(blocked)
+            await query.edit_message_text(f"✅ Пак `{pack_name}` удалён из чёрного списка.")
+        else:
+            await query.edit_message_text("❌ Пак уже удалён.")
+
+    elif data.startswith("confirm_del_sticker_"):
+        fid = data[20:]
+        if fid in blocked["stickers"]:
+            blocked["stickers"].remove(fid)
+            save_blacklist(blocked)
+            await query.edit_message_text(f"✅ Стикер `{fid}` удалён.")
+        else:
+            await query.edit_message_text("❌ Стикер уже удалён.")
+
+    elif data.startswith("confirm_del_gif_"):
+        fid = data[16:]
+        if fid in blocked["gifs"]:
+            blocked["gifs"].remove(fid)
+            save_blacklist(blocked)
+            await query.edit_message_text(f"✅ GIF `{fid}` удалена.")
+        else:
+            await query.edit_message_text("❌ GIF уже удалена.")
+
+    elif data == "cancel":
+        await query.edit_message_text("❌ Удаление отменено.")
 
 # ---------- Добавление медиа (только от владельца) ----------
 async def add_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
