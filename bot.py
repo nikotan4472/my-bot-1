@@ -353,22 +353,25 @@ async def moderate_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
 MUTE_DURATION = 3600  # 1 час в секундах (измените по желанию)
 
 async def delete_and_mute(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, chat_id: int, reason: str):
-    # Удаляем сообщение
+    # Удаляем сообщение нарушителя
     try:
         await update.message.delete()
     except:
         pass
 
-    # Проверяем, не админ ли пользователь
+    # Не мутим админов
     try:
         chat_member = await context.bot.get_chat_member(chat_id, user_id)
         if chat_member.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR]:
-            logging.info(f"Попытка замутить админа {user_id} — отмена.")
             return
     except:
-        pass  # если не удалось проверить — всё равно мутим
+        pass
 
-    # Мутим пользователя
+    # Формируем упоминание
+    username = update.effective_user.username
+    mention = f"@{username}" if username else f"пользователь {update.effective_user.full_name}"
+
+    # Применяем мут
     try:
         until = update.message.date + timedelta(seconds=MUTE_DURATION)
         await context.bot.restrict_chat_member(
@@ -383,7 +386,7 @@ async def delete_and_mute(update: Update, context: ContextTypes.DEFAULT_TYPE, us
                 "can_send_video_notes": False,
                 "can_send_voice_notes": False,
                 "can_send_polls": False,
-                "can_send_other_messages": False,  # стикеры, эмодзи и т.д.
+                "can_send_other_messages": False,
                 "can_add_web_page_previews": False,
                 "can_change_info": False,
                 "can_invite_users": False,
@@ -394,7 +397,27 @@ async def delete_and_mute(update: Update, context: ContextTypes.DEFAULT_TYPE, us
         logging.info(f"Пользователь {user_id} замучен на {MUTE_DURATION} сек за {reason}.")
     except Exception as e:
         logging.warning(f"Не удалось замутить {user_id}: {e}")
+        return
 
+    # Отправляем уведомление (без авто-удаления)
+    hours = MUTE_DURATION // 3600
+    minutes = (MUTE_DURATION % 3600) // 60
+    if hours:
+        duration_str = f"{hours} час" if hours == 1 else f"{hours} часа" if hours < 5 else f"{hours} часов"
+    else:
+        duration_str = f"{minutes} минут"
+
+    try:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=(
+                f"🔇 {mention} замучен на **{duration_str}** за отправку запрещённого контента.\n"
+            ),
+            parse_mode="Markdown",
+        )
+    except Exception as e:
+        logging.warning(f"Не удалось отправить уведомление: {e}")
+        
 # ---------- Основная функция ----------
 async def main():
     logging.basicConfig(level=logging.INFO)
@@ -432,3 +455,4 @@ if __name__ == "__main__":
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(main())
+
