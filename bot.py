@@ -14,7 +14,7 @@ from telegram.ext import (
 )
 
 # ---------- Настройки ----------
-BOT_TOKEN = "8447551685:AAGaXMpEnJ8O1H5gx4ysaKBjp_DTn78mnBw"        # ← ЗАМЕНИТЕ
+BOT_TOKEN = "8291804416:AAHqlpSYJGJc3PhxpuY2ySgvwdpKng048c0"        # ← ЗАМЕНИТЕ
 OWNER_ID = 6591792069                        # ← ВАШ Telegram ID (число!)
 BLACKLIST_FILE = "blocked_media.json"
 CACHE_FILE = "sticker_titles_cache.json"
@@ -403,3 +403,4 @@ if __name__ == "__main__":
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(main())
+
