@@ -3,6 +3,8 @@ import json
 import os
 import asyncio
 import sys
+from datetime import timedelta
+from telegram.constants import ChatMemberStatus
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (
     Application,
@@ -294,77 +296,104 @@ async def add_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ---------- Модерация в группах ----------
+
 async def moderate_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
+
+    # Проверка стикера
     if update.message.sticker:
         pack_name = update.message.sticker.set_name
 
         # 🔹 1. Быстрая проверка по set_name
         if pack_name and contains_nsfw(pack_name):
-            if pack_name not in blocked["packs"]:
-                blocked["packs"].add(pack_name)
-                save_blacklist(blocked)
-                logging.info(f"[set_name] Авто-блок: {pack_name}")
-            try:
-                await update.message.delete()
-            except:
-                pass
+            await delete_and_mute(update, context, user_id, chat_id, "стикер (имя пака)")
             return
 
         # 🔹 2. Проверка по заголовку (с кэшированием)
         if pack_name:
-            # Загружаем заголовок, если не в кэше
             if pack_name not in title_cache:
                 try:
                     sticker_set = await context.bot.get_sticker_set(pack_name)
                     title_cache[pack_name] = sticker_set.title
                     save_title_cache(title_cache)
-                    logging.info(f"Кэш заголовка: {pack_name} → {sticker_set.title}")
                 except Exception as e:
                     title_cache[pack_name] = ""
                     logging.warning(f"Не удалось загрузить пак {pack_name}: {e}")
 
-            # Проверяем заголовок
             title = title_cache.get(pack_name, "")
             if contains_nsfw(title):
-                if pack_name not in blocked["packs"]:
-                    blocked["packs"].add(pack_name)
-                    save_blacklist(blocked)
-                    logging.info(f"[title] Авто-блок: {pack_name} («{title}»)")
-                try:
-                    await update.message.delete()
-                except:
-                    pass
+                await delete_and_mute(update, context, user_id, chat_id, "стикер (название пака)")
                 return
 
-        # 🔹 3. Ручная блокировка
+        # 🔹 3. Ручная блокировка пака
         if pack_name and pack_name in blocked["packs"]:
-            try:
-                await update.message.delete()
-            except:
-                pass
+            await delete_and_mute(update, context, user_id, chat_id, "заблокированный стикерпак")
             return
 
         # 🔹 4. По ID
         fid = update.message.sticker.file_unique_id
         if fid in blocked["stickers"]:
-            try:
-                await update.message.delete()
-            except:
-                pass
+            await delete_and_mute(update, context, user_id, chat_id, "заблокированный стикер")
             return
 
-    # GIF — без изменений
+    # Проверка GIF
     fid = None
     if update.message.document and update.message.document.mime_type == "image/gif":
         fid = update.message.document.file_unique_id
     elif update.message.animation:
         fid = update.message.animation.file_unique_id
-    if fid and fid in blocked["gifs"]:
-        try:
-            await update.message.delete()
-        except:
-            pass
 
+    if fid and fid in blocked["gifs"]:
+        await delete_and_mute(update, context, user_id, chat_id, "заблокированная GIF")
+        return
+
+
+# ---------- Вспомогательная функция: удалить + замутить ----------
+MUTE_DURATION = 3600  # 1 час в секундах (измените по желанию)
+
+async def delete_and_mute(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, chat_id: int, reason: str):
+    # Удаляем сообщение
+    try:
+        await update.message.delete()
+    except:
+        pass
+
+    # Проверяем, не админ ли пользователь
+    try:
+        chat_member = await context.bot.get_chat_member(chat_id, user_id)
+        if chat_member.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR]:
+            logging.info(f"Попытка замутить админа {user_id} — отмена.")
+            return
+    except:
+        pass  # если не удалось проверить — всё равно мутим
+
+    # Мутим пользователя
+    try:
+        until = update.message.date + timedelta(seconds=MUTE_DURATION)
+        await context.bot.restrict_chat_member(
+            chat_id=chat_id,
+            user_id=user_id,
+            permissions={
+                "can_send_messages": False,
+                "can_send_audios": False,
+                "can_send_documents": False,
+                "can_send_photos": False,
+                "can_send_videos": False,
+                "can_send_video_notes": False,
+                "can_send_voice_notes": False,
+                "can_send_polls": False,
+                "can_send_other_messages": False,  # стикеры, эмодзи и т.д.
+                "can_add_web_page_previews": False,
+                "can_change_info": False,
+                "can_invite_users": False,
+                "can_pin_messages": False,
+            },
+            until_date=until,
+        )
+        logging.info(f"Пользователь {user_id} замучен на {MUTE_DURATION} сек за {reason}.")
+    except Exception as e:
+        logging.warning(f"Не удалось замутить {user_id}: {e}")
 
 # ---------- Основная функция ----------
 async def main():
@@ -403,4 +432,3 @@ if __name__ == "__main__":
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(main())
-
